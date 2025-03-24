@@ -2,6 +2,7 @@
 
 create database LibraryManager
 -- Bảng Users (Người dùng)
+
 use LibraryManager
 
 CREATE TABLE [dbo].[Users] (
@@ -9,7 +10,7 @@ CREATE TABLE [dbo].[Users] (
     [Username] NVARCHAR (50)  NOT NULL UNIQUE,
     [Password] NVARCHAR (255) NOT NULL,
     [FirstName] NVARCHAR (100) NOT NULL,
-	[LastName] NVARCHAR (100) NOT NULL,
+    [LastName] NVARCHAR (100) NOT NULL,
     [Birthday] DATE           NOT NULL,
     [Role]     NVARCHAR (20)  NOT NULL CHECK ([Role] IN ('Manager', 'User')),
     [Gender]   NVARCHAR (20)  NOT NULL,
@@ -29,26 +30,42 @@ CREATE TABLE [dbo].[Books] (
     [Quantity]    INT            DEFAULT (1) NOT NULL CHECK ([Quantity] >= 0),
     [Language]    NVARCHAR (50)  NOT NULL,
     [Description] TEXT           NULL,
-    [ImagePath]   NVARCHAR (100) NULL,
+    [ImagePath]   VARCHAR(MAX)  NULL,
     [IsAvailable] BIT            DEFAULT (1) NOT NULL,
     [Page]        INT            NULL,
     PRIMARY KEY ([Id])
 );
+
 GO
 
 -- Bảng BookTransactions (Giao dịch mượn/trả sách)
-CREATE TABLE [dbo].Loans (
-    [Id]         INT           IDENTITY (1, 1) NOT NULL,
-    [UserId]     INT           NOT NULL,
-    [BookId]     INT           NOT NULL,
-    [BorrowDate] DATE          DEFAULT (getdate()) NOT NULL,
-    [ReturnDate] DATE          NULL,
-    [Status]     NVARCHAR (20) NOT NULL CHECK ([Status] IN ('Overdue', 'Returned', 'Borrowed')),
+CREATE TABLE [dbo].[Loans] (
+    [Id]          INT           IDENTITY (1, 1) NOT NULL,
+    [UserId]      INT           NOT NULL,
+    [BookId]      INT           NOT NULL,
+    [BorrowDate]  DATE          DEFAULT (GETDATE()) NOT NULL,
+    [DueDate]     DATE          DEFAULT (DATEADD(DAY, 7, GETDATE())) NOT NULL,
+    [ReturnDate]  DATE          NULL,
+    [Status]      NVARCHAR (20) NOT NULL DEFAULT ('Borrowing') CHECK ([Status] IN ('Borrowing', 'Overdue', 'Returned')),
     PRIMARY KEY ([Id]),
     FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users] ([Id]) ON DELETE CASCADE,
     FOREIGN KEY ([BookId]) REFERENCES [dbo].[Books] ([Id]) ON DELETE CASCADE
 );
-GO
+
+go
+
+CREATE TRIGGER trg_UpdateLoanStatus
+ON Loans
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    -- Cập nhật trạng thái thành 'Overdue' nếu ngày hiện tại vượt quá DueDate
+    UPDATE Loans
+    SET Status = 'Overdue'
+    WHERE 
+        Status = 'Borrowing' AND 
+        GETDATE() > DueDate;
+END;
 
 -- Bảng BookReservations (Đặt trước sách)
 CREATE TABLE [dbo].[BookReservations] (
@@ -60,17 +77,6 @@ CREATE TABLE [dbo].[BookReservations] (
     PRIMARY KEY ([Id]),
     FOREIGN KEY ([UserId]) REFERENCES [dbo].[Users] ([Id]) ON DELETE CASCADE,
     FOREIGN KEY ([BookId]) REFERENCES [dbo].[Books] ([Id]) ON DELETE CASCADE
-);
-GO
-
--- Bảng BookLogs (Lịch sử thao tác với sách) - Không cần khóa ngoại
-CREATE TABLE [dbo].[BookLogs] (
-    [Id]         INT           IDENTITY (1, 1) NOT NULL,
-    [ManagerId]  INT           NOT NULL,
-    [BookId]     INT           NULL,
-    [Action]     NVARCHAR (50) NOT NULL CHECK ([Action] IN ('Deleted', 'Updated', 'Added')),
-    [ActionDate] DATETIME      DEFAULT (getdate()) NOT NULL,
-    PRIMARY KEY ([Id])
 );
 GO
 
@@ -87,22 +93,7 @@ CREATE TABLE LoanHistory (
 );
 
 
-CREATE TRIGGER trg_UpdateIsAvailable
-ON [dbo].[Books]
-AFTER INSERT, UPDATE
-AS
-BEGIN
-    -- Cập nhật IsAvailable dựa trên Quantity
-    UPDATE b
-    SET b.IsAvailable = CASE 
-                            WHEN i.Quantity >= 1 THEN 1 
-                            ELSE 0 
-                        END
-    FROM [dbo].[Books] b
-    INNER JOIN inserted i ON b.Id = i.Id;
-END;
-
-DELETE FROM [dbo].[Users];
+go
 
 INSERT INTO [dbo].[Users] ([Username], [Password], [FirstName], [LastName], [Birthday], [Role], [Gender], [Phone])
 VALUES 
@@ -115,7 +106,7 @@ VALUES
     ('michael_miller', 'mikepass', 'Michael', 'Miller', '1988-12-30', 'User', 'Male', '333-333-3333'),
     ('sarah_johnson', 'sarahpass', 'Sarah', 'Johnson', '1998-02-14', 'User', 'Female', '222-222-2222'),
     ('david_wilson', 'davidpass', 'David', 'Wilson', '1970-06-01', 'User', 'Male', NULL),
-    ('laura_taylor', 'laurapass', 'Laura', 'Taylor', '1982-04-12', 'Manager', 'Female', '111-111-1111'),
+    ('admin', '123', 'Laura', 'Taylor', '1982-04-12', 'Manager', 'Female', '111-111-1111'),
     ('steven_anderson', 'stevenpass', 'Steven', 'Anderson', '1993-07-20', 'User', 'Male', '666-666-6666'),
     ('olivia_thomas', 'oliviapass', 'Olivia', 'Thomas', '1987-01-05', 'User', 'Female', NULL),
     ('james_jackson', 'jamespass', 'James', 'Jackson', '1977-03-17', 'User', 'Male', '777-777-7777'),
@@ -125,17 +116,18 @@ VALUES
     ('liam_lewis', 'liampass', 'Liam', 'Lewis', '1979-10-14', 'User', 'Male', '123-123-1234'),
     ('amelia_young', 'ameliapass', 'Amelia', 'Young', '1994-02-02', 'User', 'Female', NULL),
     ('ethan_king', 'ethanpass', 'Ethan', 'King', '1986-06-19', 'User', 'Male', '432-432-4321'),
-    ('isabella_wright', 'isabellapass', 'Isabella', 'Wright', '1997-04-11', 'User', 'Female', '543-543-5432');
+    ('isabella_wright', 'isabellapass', 'Isabella', 'Wright', '1997-04-11', 'User', 'Female', '543-543-5432'),
+	('Le12', 'Le2002', 'Le', 'Nguyen', '2002-03-11', 'User', 'Custom', '543-543-5432');
 
 
-INSERT INTO [dbo].[Books] ([Title], [Author], [PublishYear], [ISBN], [Genre], [Language], [Description], [ImagePath], [Page], [Quantity], [IsAvailable])
+	INSERT INTO [dbo].[Books] ([Title], [Author], [PublishYear], [ISBN], [Genre], [Language], [Description], [ImagePath], [Page], [Quantity], [IsAvailable])
 VALUES 
 -- Book 1
-('The Night Circus', 'Erin Morgenstern', 2011, '978-0307744166', 'Fantasy', 'English', 'A magical competition between two young illusionists.', 'images/night-circus.jpg', 387, 5, 1),
+('The Night Circus', 'Erin Morgenstern', 2011, '978-0307744166', 'Fantasy', 'English', 'A magical competition between two young illusionists.', 'K:\Semester - Spring2025\PRN212\MionaLibrary\MionaLibrary\MionaLibrary\BookImage\The_Night_Circus.jpg', 387, 5, 1),
 -- Book 2
-('The Shadow of the Wind', 'Carlos Ruiz Zafón', 2001, '978-0143117355', 'Mystery', 'French', 'A boy discovers a mysterious book that changes his life.', 'images/shadow-wind.jpg', 487, 3, 0),
+('The Shadow of the Wind', 'Carlos Ruiz Zafón', 2001, '978-0143117355', 'Mystery', 'French', 'A boy discovers a mysterious book that changes his life.', 'K:\Semester - Spring2025\PRN212\MionaLibrary\MionaLibrary\MionaLibrary\BookImage\The Shadow of the Wind.jpg', 487, 3, 0),
 -- Book 3
-('The Little Prince', 'Antoine de Saint-Exupéry', 1943, '978-0156012195', 'Fiction', 'Vietnamese', 'A philosophical tale about friendship and love.', 'images/little-prince.jpg', 96, 8, 1),
+('The Little Prince', 'Antoine de Saint-Exupéry', 1943, '978-0156012195', 'Fiction', 'Vietnamese', 'A philosophical tale about friendship and love.', 'K:\Semester - Spring2025\PRN212\MionaLibrary\MionaLibrary\MionaLibrary\BookImage\The_Little_Prince.png', 96, 8, 1),
 -- Book 4
 ('The Alchemist', 'Paulo Coelho', 1988, '978-0061122415', 'Fiction', 'English', 'A shepherd embarks on a journey of self-discovery.', 'images/alchemist.jpg', 163, 7, 1),
 -- Book 5
